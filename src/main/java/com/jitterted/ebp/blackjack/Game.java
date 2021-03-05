@@ -67,7 +67,7 @@ public class Game {
         System.out.println("You need to [H]it or [S]tand");
       }
     }
-
+    // test commit
     // Dealer makes its choice automatically based on a simple heuristic (<=16, hit, 17>stand)
     if (!playerBusted) {
       while (handValueOf(dealerHand) <= 16) {
