@@ -22,7 +22,7 @@ public class Card {
       return Integer.parseInt(rank);
     }
   }
-
+  // too long. multiple layers of abstraction
   public String display() {
     String[] lines = new String[7];
     lines[0] = "┌─────────┐";

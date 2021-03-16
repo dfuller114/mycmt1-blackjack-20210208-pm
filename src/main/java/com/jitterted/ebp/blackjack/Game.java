@@ -16,97 +16,165 @@ public class Game {
   private final List<Card> dealerHand = new ArrayList<>();
   private final List<Card> playerHand = new ArrayList<>();
 
-  public static void main(String[] args) {
-    Game game = new Game();
-
-    System.out.println(ansi()
-                           .bgBright(Ansi.Color.WHITE)
-                           .eraseScreen()
-                           .cursor(1, 1)
-                           .fgGreen().a("Welcome to")
-                           .fgRed().a(" Jitterted's")
-                           .fgBlack().a(" BlackJack"));
-
-
-    game.initialDeal();
-    game.play();
-
-    System.out.println(ansi().reset());
-  }
-
   public Game() {
     deck = new Deck();
   }
 
+  // too long because it does more than one thing. Has mix of console and domain logic in it
+  public static void main(String[] args) {
+    displayWelcomeMessage();
+    startGame();
+    resetDisplay();
+  }
+
+  private static void resetDisplay() {
+    System.out.println(ansi().reset());
+  }
+
+  private static void startGame() {
+    Game game = new Game();
+    game.initialDeal();
+    game.play();
+  }
+
+  private static void displayWelcomeMessage() {
+    System.out.println(ansi()
+            .bgBright(Ansi.Color.WHITE)
+            .eraseScreen()
+            .cursor(1, 1)
+            .fgGreen().a("Welcome to")
+            .fgRed().a(" Jitterted's")
+            .fgBlack().a(" BlackJack"));
+  }
+
   public void initialDeal() {
+    dealRoundOfCards();
+    dealRoundOfCards();
+  }
 
-    // deal first round of cards, players first
-    playerHand.add(deck.draw());
-    dealerHand.add(deck.draw());
+  // player first: that's the rule of Blackjack
+  private void dealRoundOfCards() {
+    dealCardToPlayer();
+    dealCardToDealer();
+  }
 
-    // deal next round of cards
-    playerHand.add(deck.draw());
+  private void dealCardToDealer() {
     dealerHand.add(deck.draw());
   }
 
+  private void dealCardToPlayer() {
+    playerHand.add(deck.draw());
+  }
+
   public void play() {
-    // get Player's decision: hit until they stand, then they're done (or they go bust)
-    boolean playerBusted = false;
-    while (!playerBusted) {
+    playerTurn();
+    dealerTurn();
+    displayFinalGameState();
+    determineOutcome();
+  }
+
+  // get Player's decision: hit until they stand, then they're done (or they go bust)
+  private void playerTurn() {
+    while (!hasPlayerBusted()) {
       displayGameState();
       String playerChoice = inputFromPlayer().toLowerCase();
-      if (playerChoice.startsWith("s")) {
+      if (playerStands(playerChoice)) {
         break;
       }
-      if (playerChoice.startsWith("h")) {
-        playerHand.add(deck.draw());
-        if (handValueOf(playerHand) > 21) {
-          playerBusted = true;
-        }
+      if (playerHits(playerChoice)) {
+        dealCardToPlayer();
       } else {
-        System.out.println("You need to [H]it or [S]tand");
+        displayInvalidInputMessage();
       }
     }
-    // test commit
-    // Dealer makes its choice automatically based on a simple heuristic (<=16, hit, 17>stand)
-    if (!playerBusted) {
-      while (handValueOf(dealerHand) <= 16) {
-        dealerHand.add(deck.draw());
+  }
+
+  // Dealer makes its choice automatically based on a simple heuristic (<=16, hit, 17>stand)
+  private void dealerTurn() {
+    if (!hasPlayerBusted()) {
+      while (dealerHits()) {
+        dealCardToDealer();
       }
     }
+  }
 
-    displayFinalGameState();
-
-    if (playerBusted) {
+  private void determineOutcome() {
+    if (hasPlayerBusted()) {
       System.out.println("You Busted, so you lose.  💸");
-    } else if (handValueOf(dealerHand) > 21) {
+    } else if (hasDealerBusted()) {
       System.out.println("Dealer went BUST, Player wins! Yay for you!! 💵");
-    } else if (handValueOf(dealerHand) < handValueOf(playerHand)) {
+    } else if (playerBeatsDealer()) {
       System.out.println("You beat the Dealer! 💵");
-    } else if (handValueOf(dealerHand) == handValueOf(playerHand)) {
+    } else if (dealerBeatsPlayer()) {
       System.out.println("Push: The house wins, you Lose. 💸");
     } else {
       System.out.println("You lost to the Dealer. 💸");
     }
   }
 
+  private boolean dealerBeatsPlayer() {
+    return handValueOf(dealerHand) == handValueOf(playerHand);
+  }
+
+  private boolean playerBeatsDealer() {
+    return handValueOf(dealerHand) < handValueOf(playerHand);
+  }
+
+  private boolean hasDealerBusted() {
+    return handValueOf(dealerHand) > 21;
+  }
+
+  private boolean hasPlayerBusted() {
+    return handValueOf(playerHand) > 21;
+  }
+
+  private void displayInvalidInputMessage() {
+    System.out.println("You need to [H]it or [S]tand");
+  }
+
+  private boolean dealerHits() {
+    return handValueOf(dealerHand) <= 16;
+  }
+
+  private boolean playerHits(String playerChoice) {
+    return playerChoice.startsWith("h");
+  }
+
+  private boolean playerStands(String playerChoice) {
+    return playerChoice.startsWith("s");
+  }
+
+  // too long because there are multiple layers of abstraction and the method does more than one thing
   public int handValueOf(List<Card> hand) {
-    int handValue = hand
-        .stream()
-        .mapToInt(Card::rankValue)
-        .sum();
+    int handValue = getTotalHandValue(hand);
+    handValue = adjustValueBasedOnAce(hand, handValue);
+    return handValue;
+  }
 
-    // does the hand contain at least 1 Ace?
-    boolean hasAce = hand
-        .stream()
-        .anyMatch(card -> card.rankValue() == 1);
-
+  private int adjustValueBasedOnAce(List<Card> hand, int handValue) {
     // if the total hand value <= 11, then count the Ace as 11 by adding 10
-    if (hasAce && handValue < 11) {
+    if (shouldAddAcePenalty(hand, handValue)) {
       handValue += 10;
     }
-
     return handValue;
+  }
+
+  private boolean shouldAddAcePenalty(List<Card> hand, int handValue) {
+    return hasAce(hand) && handValue < 11;
+  }
+
+  private boolean hasAce(List<Card> hand) {
+    // does the hand contain at least 1 Ace?
+    return hand
+        .stream()
+        .anyMatch(card -> card.rankValue() == 1);
+  }
+
+  private int getTotalHandValue(List<Card> hand) {
+    return hand
+            .stream()
+            .mapToInt(Card::rankValue)
+            .sum();
   }
 
   private String inputFromPlayer() {
